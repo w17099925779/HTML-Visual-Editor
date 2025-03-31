@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML可视化编辑器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+        
+        /* 顶部工具栏 */
+        .top-toolbar {
+            background-color: #3498db;
+            padding: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            z-index: 100;
+        }
+        
+        .top-toolbar button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            background-color: #2980b9;
+            color: white;
+            cursor: pointer;
+            min-width: 100px;
+        }
+        
+        .component-actions {
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        /* 左侧组件面板 */
+        .components-panel {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px;
+            overflow-y: auto;
+            transition: transform 0.3s;
+        }
+        
+        .component-category {
+            margin-bottom: 20px;
+        }
+        
+        .category-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #34495e;
+        }
+        
+        .component-item {
+            background-color: #34495e;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            touch-action: none;
+        }
+        
+        .component-item:hover {
+            background-color: #3d566e;
+        }
+        
+        /* 中间编辑区域 */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #ecf0f1;
+            overflow: hidden;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            padding: 15px;
+            overflow: auto;
+        }
+        
+        .canvas {
+            min-height: 100%;
+            background-color: white;
+            border: 1px dashed #bdc3c7;
+            padding: 20px;
+            position: relative;
+        }
+        
+        /* 右侧属性面板 */
+        .properties-panel {
+            width: 300px;
+            background-color: #34495e;
+            color: white;
+            padding: 15px;
+            overflow-y: auto;
+            transition: transform 0.3s;
+        }
+        
+        .property-group {
+            margin-bottom: 20px;
+        }
+        
+        .property-group-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #2c3e50;
+        }
+        
+        .property-item {
+            margin-bottom: 10px;
+        }
+        
+        .property-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .property-item input, 
+        .property-item select, 
+        .property-item textarea {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: none;
+            background-color: #2c3e50;
+            color: white;
+        }
+        
+        .property-item textarea {
+            min-height: 80px;
+        }
+        
+        /* 可编辑元素样式 */
+        .editable {
+            outline: 1px dashed transparent;
+            padding: 5px;
+            margin: 5px 0;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .editable:hover {
+            outline-color: #3498db;
+        }
+        
+        .editable.selected {
+            outline: 2px solid #3498db;
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .components-panel, 
+            .properties-panel {
+                position: fixed;
+                width: 90%;
+                height: 60vh;
+                z-index: 200;
+                box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            }
+            
+            .components-panel {
+                top: -100vh;
+                left: 5%;
+            }
+            
+            .properties-panel {
+                bottom: -100vh;
+                left: 5%;
+            }
+            
+            .components-panel.active {
+                transform: translateY(calc(100vh + 10px));
+            }
+            
+            .properties-panel.active {
+                transform: translateY(calc(-100vh - 10px));
+            }
+            
+            .top-toolbar button {
+                flex: 1;
+                min-width: auto;
+                padding: 10px 5px;
+                font-size: 14px;
+            }
+            
+            .component-actions {
+                margin-left: 0;
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .canvas {
+                padding: 10px;
+            }
+        }
+        
+        /* 拖拽提示 */
+        .drag-hint {
+            position: absolute;
+            background: rgba(52, 152, 219, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-toolbar">
+        <button id="open-btn">打开HTML</button>
+        <button id="preview-btn">预览</button>
+        <button id="clear-btn">重置</button>
+        <button id="export-btn">导出HTML</button>
+        <div class="component-actions">
+            <button id="add-component-btn">+ 组件</button>
+            <button id="edit-props-btn">✎ 属性</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <!-- 左侧组件面板 -->
+        <div class="components-panel" id="components-panel">
+            <div class="component-category">
+                <div class="category-title">基础组件</div>
+                <div class="component-item" draggable="true" data-type="heading">标题</div>
+                <div class="component-item" draggable="true" data-type="paragraph">段落</div>
+                <div class="component-item" draggable="true" data-type="button">按钮</div>
+                <div class="component-item" draggable="true" data-type="image">图片</div>
+            </div>
+            
+            <div class="component-category">
+                <div class="category-title">表单组件</div>
+                <div class="component-item" draggable="true" data-type="input">输入框</div>
+                <div class="component-item" draggable="true" data-type="textarea">多行文本</div>
+                <div class="component-item" draggable="true" data-type="select">下拉框</div>
+                <div class="component-item" draggable="true" data-type="checkbox">复选框</div>
+                <div class="component-item" draggable="true" data-type="radio">单选框</div>
+            </div>
+            
+            <div class="component-category">
+                <div class="category-title">布局组件</div>
+                <div class="component-item" draggable="true" data-type="div">容器</div>
+                <div class="component-item" draggable="true" data-type="row">行</div>
+                <div class="component-item" draggable="true" data-type="column">列</div>
+            </div>
+        </div>
+        
+        <!-- 中间编辑区域 -->
+        <div class="editor-area">
+            <div class="canvas-container">
+                <div class="canvas" id="canvas">
+                    <h1 class="editable" contenteditable="true">欢迎使用HTML可视化编辑器</h1>
+                    <p class="editable" contenteditable="true">从这里开始创建您的网页内容。拖放组件或直接编辑文本。</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 右侧属性面板 -->
+        <div class="properties-panel" id="properties-panel">
+            <div class="property-group">
+                <div class="property-group-title">元素属性</div>
+                <div class="property-item">
+                    <label for="element-id">ID</label>
+                    <input type="text" id="element-id" placeholder="输入元素ID">
+                </div>
+                <div class="property-item">
+                    <label for="element-class">类名</label>
+                    <input type="text" id="element-class" placeholder="输入类名，用空格分隔">
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-group-title">样式</div>
+                <div class="property-item">
+                    <label for="element-text">文本内容</label>
+                    <textarea id="element-text" placeholder="输入文本内容"></textarea>
+                </div>
+                <div class="property-item">
+                    <label for="element-color">文字颜色</label>
+                    <input type="color" id="element-color">
+                </div>
+                <div class="property-item">
+                    <label for="element-bgcolor">背景颜色</label>
+                    <input type="color" id="element-bgcolor">
+                </div>
+                <div class="property-item">
+                    <label for="element-fontsize">字体大小</label>
+                    <input type="text" id="element-fontsize" placeholder="例如: 16px">
+                </div>
+            </div>
+            
+            <div class="property-group">
+                <div class="property-group-title">操作</div>
+                <div class="property-item">
+                    <button id="delete-btn" style="width:100%; padding: 10px; background-color:#e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">删除元素</button>
+                </div>
+                <div class="property-item">
+                    <button id="clone-btn" style="width:100%; padding: 10px; background-color:#2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer;">复制元素</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="drag-hint" id="drag-hint"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 当前选中的元素
+            let selectedElement = null;
+            const canvas = document.getElementById('canvas');
+            const componentItems = document.querySelectorAll('.component-item');
+            const dragHint = document.getElementById('drag-hint');
+
+            // 组件操作按钮
+            document.getElementById('add-component-btn').addEventListener('click', function() {
+                document.getElementById('components-panel').classList.toggle('active');
+            });
+            
+            document.getElementById('edit-props-btn').addEventListener('click', function() {
+                document.getElementById('properties-panel').classList.toggle('active');
+            });
+
+            // 文件输入处理
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.html,.htm';
+            fileInput.style.display = 'none';
+            document.body.appendChild(fileInput);
+            
+            document.getElementById('open-btn').addEventListener('click', function() {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(e.target.result, 'text/html');
+                        const bodyContent = doc.body.innerHTML;
+                        
+                        // 创建临时容器处理内容
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = bodyContent;
+                        
+                        // 清空画布但保留一个默认元素以防完全空
+                        canvas.innerHTML = '';
+                        
+                        // 转换所有元素为可编辑
+                        if (tempDiv.children.length > 0) {
+                            Array.from(tempDiv.children).forEach(child => {
+                                processImportedElement(child);
+                                canvas.appendChild(child);
+                            });
+                        } else {
+                            addDefaultContent();
+                        }
+                        
+                        // 重新绑定所有可编辑元素的事件
+                        bindEditableEvents();
+                        
+                    } catch (error) {
+                        console.error('解析HTML文件出错:', error);
+                        alert('无法解析该HTML文件，请检查文件内容');
+                        addDefaultContent();
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            function processImportedElement(element) {
+                // 跳过script和style标签
+                if (element.tagName === 'SCRIPT' || element.tagName === 'STYLE') {
+                    return false;
+                }
+                
+                // 添加可编辑类
+                element.classList.add('editable');
+                element.setAttribute('contenteditable', 'true');
+                
+                // 处理子元素
+                Array.from(element.children).forEach(child => {
+                    processImportedElement(child);
+                });
+                
+                return true;
+            }
+
+            // 重置功能
+            document.getElementById('clear-btn').addEventListener('click', function() {
+                if (confirm('确定要重置画布吗？所有内容将被清除')) {
+                    canvas.innerHTML = '';
+                    addDefaultContent();
+                    bindEditableEvents();
+                }
+            });
+
+            function addDefaultContent() {
+                const defaultHTML = `
+                    <h1 class="editable" contenteditable="true">欢迎使用HTML可视化编辑器</h1>
+                    <p class="editable" contenteditable="true">从这里开始创建您的网页内容。拖放组件或直接编辑文本。</p>
+                `;
+                canvas.innerHTML = defaultHTML;
+            }
+
+            // 组件拖放功能
+            componentItems.forEach(item => {
+                // 桌面端拖拽
+                item.addEventListener('dragstart', function(e) {
+                    e.dataTransfer.setData('text/plain', this.getAttribute('data-type'));
+                    dragHint.textContent = this.textContent;
+                    dragHint.style.display = 'block';
+                });
+                
+                // 移动端触摸
+                item.addEventListener('touchstart', handleTouchStart, {passive: false});
+                item.addEventListener('touchmove', handleTouchMove, {passive: false});
+                item.addEventListener('touchend', handleTouchEnd, {passive: false});
+            });
+
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let currentDraggedType = null;
+            
+            function handleTouchStart(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
+                currentDraggedType = this.getAttribute('data-type');
+                dragHint.textContent = this.textContent;
+                dragHint.style.display = 'block';
+            }
+            
+            function handleTouchMove(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                dragHint.style.left = (touch.clientX + 10) + 'px';
+                dragHint.style.top = (touch.clientY + 10) + 'px';
+            }
+            
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const rect = canvas.getBoundingClientRect();
+                
+                if (touch.clientX > rect.left && touch.clientX < rect.right &&
+                    touch.clientY > rect.top && touch.clientY < rect.bottom) {
+                    addComponent(currentDraggedType, 
+                        touch.clientX - rect.left - 20, 
+                        touch.clientY - rect.top - 20);
+                }
+                
+                dragHint.style.display = 'none';
+                currentDraggedType = null;
+            }
+
+            canvas.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                dragHint.style.left = (e.clientX + 10) + 'px';
+                dragHint.style.top = (e.clientY + 10) + 'px';
+            });
+            
+            canvas.addEventListener('dragend', function() {
+                dragHint.style.display = 'none';
+            });
+            
+            canvas.addEventListener('drop', function(e) {
+                e.preventDefault();
+                const componentType = e.dataTransfer.getData('text/plain');
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                addComponent(componentType, x, y);
+                dragHint.style.display = 'none';
+            });
+
+            // 添加组件到画布
+            function addComponent(type, x, y) {
+                let newElement;
+                
+                switch(type) {
+                    case 'heading':
+                        newElement = document.createElement('h2');
+                        newElement.textContent = '新标题';
+                        newElement.style.margin = '10px 0';
+                        break;
+                    case 'paragraph':
+                        newElement = document.createElement('p');
+                        newElement.textContent = '这是一个段落文本。您可以在这里输入您想要的内容。';
+                        newElement.style.margin = '10px 0';
+                        break;
+                    case 'button':
+                        newElement = document.createElement('button');
+                        newElement.textContent = '按钮';
+                        newElement.style.padding = '8px 16px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.backgroundColor = '#3498db';
+                        newElement.style.color = 'white';
+                        newElement.style.border = 'none';
+                        newElement.style.borderRadius = '4px';
+                        newElement.style.cursor = 'pointer';
+                        break;
+                    case 'image':
+                        newElement = document.createElement('img');
+                        newElement.src = 'https://via.placeholder.com/200x150';
+                        newElement.alt = '图片';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.maxWidth = '100%';
+                        break;
+                    case 'input':
+                        newElement = document.createElement('input');
+                        newElement.type = 'text';
+                        newElement.placeholder = '请输入内容...';
+                        newElement.style.padding = '8px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.width = '100%';
+                        break;
+                    case 'textarea':
+                        newElement = document.createElement('textarea');
+                        newElement.placeholder = '请输入多行文本...';
+                        newElement.style.padding = '8px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.width = '100%';
+                        newElement.style.minHeight = '100px';
+                        break;
+                    case 'select':
+                        newElement = document.createElement('select');
+                        newElement.innerHTML = `
+                            <option value="">请选择</option>
+                            <option value="1">选项1</option>
+                            <option value="2">选项2</option>
+                            <option value="3">选项3</option>
+                        `;
+                        newElement.style.padding = '8px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.width = '100%';
+                        break;
+                    case 'checkbox':
+                        newElement = document.createElement('div');
+                        newElement.style.margin = '10px 0';
+                        
+                        const checkboxLabel = document.createElement('label');
+                        checkboxLabel.style.display = 'flex';
+                        checkboxLabel.style.alignItems = 'center';
+                        checkboxLabel.style.gap = '8px';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        
+                        const checkboxText = document.createElement('span');
+                        checkboxText.textContent = '复选框选项';
+                        
+                        checkboxLabel.appendChild(checkbox);
+                        checkboxLabel.appendChild(checkboxText);
+                        newElement.appendChild(checkboxLabel);
+                        break;
+                    case 'radio':
+                        newElement = document.createElement('div');
+                        newElement.style.margin = '10px 0';
+                        
+                        const radioLabel = document.createElement('label');
+                        radioLabel.style.display = 'flex';
+                        radioLabel.style.alignItems = 'center';
+                        radioLabel.style.gap = '8px';
+                        
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = 'radio-group-' + Math.random().toString(36).substr(2, 9);
+                        
+                        const radioText = document.createElement('span');
+                        radioText.textContent = '单选框选项';
+                        
+                        radioLabel.appendChild(radio);
+                        radioLabel.appendChild(radioText);
+                        newElement.appendChild(radioLabel);
+                        break;
+                    case 'div':
+                        newElement = document.createElement('div');
+                        newElement.style.padding = '15px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.border = '1px dashed #ccc';
+                        newElement.style.minHeight = '50px';
+                        newElement.textContent = '这是一个容器，可以放置其他元素';
+                        break;
+                    case 'row':
+                        newElement = document.createElement('div');
+                        newElement.style.display = 'flex';
+                        newElement.style.flexDirection = 'row';
+                        newElement.style.gap = '10px';
+                        newElement.style.padding = '15px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.border = '1px dashed #ccc';
+                        newElement.style.minHeight = '50px';
+                        newElement.textContent = '这是一个行布局';
+                        break;
+                    case 'column':
+                        newElement = document.createElement('div');
+                        newElement.style.display = 'flex';
+                        newElement.style.flexDirection = 'column';
+                        newElement.style.gap = '10px';
+                        newElement.style.padding = '15px';
+                        newElement.style.margin = '10px 0';
+                        newElement.style.border = '1px dashed #ccc';
+                        newElement.style.minHeight = '50px';
+                        newElement.textContent = '这是一个列布局';
+                        break;
+                    default:
+                        return;
+                }
+                
+                // 添加可编辑类和一些基本属性
+                newElement.classList.add('editable');
+                newElement.setAttribute('contenteditable', type !== 'input' && type !== 'textarea' && type !== 'select' && type !== 'checkbox' && type !== 'radio');
+                
+                // 设置位置
+                newElement.style.position = 'relative';
+                newElement.style.left = 'auto';
+                newElement.style.top = 'auto';
+                newElement.style.marginLeft = x + 'px';
+                newElement.style.marginTop = y + 'px';
+                
+                // 添加点击事件
+                newElement.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    selectElement(this);
+                });
+                
+                canvas.appendChild(newElement);
+                selectElement(newElement);
+            }
+            
+            // 选择元素
+            function selectElement(element) {
+                // 取消之前选中的元素
+                if (selectedElement) {
+                    selectedElement.classList.remove('selected');
+                }
+                
+                // 选中新元素
+                selectedElement = element;
+                selectedElement.classList.add('selected');
+                
+                // 更新属性面板
+                updatePropertiesPanel();
+                
+                // 移动端自动展开属性面板
+                if (window.innerWidth <= 768) {
+                    document.getElementById('properties-panel').classList.add('active');
+                }
+            }
+            
+            // 更新属性面板
+            function updatePropertiesPanel() {
+                if (!selectedElement) return;
+                
+                document.getElementById('element-id').value = selectedElement.id || '';
+                document.getElementById('element-class').value = Array.from(selectedElement.classList)
+                    .filter(c => c !== 'editable' && c !== 'selected')
+                    .join(' ');
+                
+                if (selectedElement.tagName === 'INPUT' || selectedElement.tagName === 'TEXTAREA') {
+                    document.getElementById('element-text').value = selectedElement.value;
+                } else if (!selectedElement.querySelector('input, select, textarea')) {
+                    document.getElementById('element-text').value = selectedElement.textContent;
+                } else {
+                    document.getElementById('element-text').value = '';
+                }
+                
+                // 获取计算样式
+                const computedStyle = window.getComputedStyle(selectedElement);
+                document.getElementById('element-color').value = rgbToHex(computedStyle.color);
+                document.getElementById('element-bgcolor').value = rgbToHex(computedStyle.backgroundColor);
+                document.getElementById('element-fontsize').value = computedStyle.fontSize;
+            }
+            
+            // RGB转HEX
+            function rgbToHex(rgb) {
+                if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') return '#000000';
+                
+                // 处理rgb(r, g, b)格式
+                const rgbMatch = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+                if (rgbMatch) {
+                    const r = parseInt(rgbMatch[1]).toString(16).padStart(2, '0');
+                    const g = parseInt(rgbMatch[2]).toString(16).padStart(2, '0');
+                    const b = parseInt(rgbMatch[3]).toString(16).padStart(2, '0');
+                    return `#${r}${g}${b}`;
+                }
+                
+                // 处理rgba(r, g, b, a)格式
+                const rgbaMatch = rgb.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/);
+                if (rgbaMatch) {
+                    const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
+                    const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
+                    const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
+                    return `#${r}${g}${b}`;
+                }
+                
+                // 已经是hex格式或无法识别则直接返回
+                return rgb;
+            }
+            
+            // 点击画布取消选择
+            canvas.addEventListener('click', function(e) {
+                if (e.target === canvas) {
+                    if (selectedElement) {
+                        selectedElement.classList.remove('selected');
+                        selectedElement = null;
+                    }
+                }
+            });
+            
+            // 属性面板事件
+            document.getElementById('element-id').addEventListener('change', function() {
+                if (selectedElement) {
+                    selectedElement.id = this.value;
+                }
+            });
+            
+            document.getElementById('element-class').addEventListener('change', function() {
+                if (selectedElement) {
+                    // 保留editable和selected类
+                    selectedElement.className = 'editable selected ' + this.value;
+                }
+            });
+            
+            document.getElementById('element-text').addEventListener('change', function() {
+                if (selectedElement) {
+                    if (selectedElement.tagName === 'INPUT' || selectedElement.tagName === 'TEXTAREA') {
+                        selectedElement.value = this.value;
+                    } else if (!selectedElement.querySelector('input, select, textarea')) {
+                        selectedElement.textContent = this.value;
+                    }
+                }
+            });
+            
+            document.getElementById('element-color').addEventListener('change', function() {
+                if (selectedElement) {
+                    selectedElement.style.color = this.value;
+                }
+            });
+            
+            document.getElementById('element-bgcolor').addEventListener('change', function() {
+                if (selectedElement) {
+                    selectedElement.style.backgroundColor = this.value;
+                }
+            });
+            
+            document.getElementById('element-fontsize').addEventListener('change', function() {
+                if (selectedElement) {
+                    selectedElement.style.fontSize = this.value;
+                }
+            });
+            
+            // 删除元素
+            document.getElementById('delete-btn').addEventListener('click', function() {
+                if (selectedElement && selectedElement.parentNode === canvas) {
+                    selectedElement.remove();
+                    selectedElement = null;
+                }
+            });
+            
+            // 复制元素
+            document.getElementById('clone-btn').addEventListener('click', function() {
+                if (selectedElement) {
+                    const clonedElement = selectedElement.cloneNode(true);
+                    clonedElement.style.marginLeft = (parseInt(selectedElement.style.marginLeft) || 0) + 20 + 'px';
+                    clonedElement.style.marginTop = (parseInt(selectedElement.style.marginTop) || 0) + 20 + 'px';
+                    clonedElement.classList.add('editable');
+                    clonedElement.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        selectElement(this);
+                    });
+                    canvas.appendChild(clonedElement);
+                    selectElement(clonedElement);
+                }
+            });
+            
+            // 预览功能
+            document.getElementById('preview-btn').addEventListener('click', function() {
+                const previewWindow = window.open('', '_blank');
+                previewWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>预览</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 20px; }
+                            ${getAllCSSRules()}
+                        </style>
+                    </head>
+                    <body>
+                        ${canvas.innerHTML}
+                        <script>
+                            // 禁用内容编辑
+                            document.querySelectorAll('[contenteditable]').forEach(el => {
+                                el.setAttribute('contenteditable', 'false');
+                            });
+                        <\/script>
+                    </body>
+                    </html>
+                `);
+                previewWindow.document.close();
+            });
+            
+            // 导出HTML - 按照您要求的格式
+            document.getElementById('export-btn').addEventListener('click', function() {
+                // 创建克隆节点来处理内容
+                const cloneCanvas = canvas.cloneNode(true);
+                
+                // 移除所有编辑相关属性
+                cloneCanvas.querySelectorAll('*').forEach(el => {
+                    el.removeAttribute('contenteditable');
+                    el.classList.remove('editable', 'selected');
+                    
+                    // 保留原始ID和类
+                    const originalClasses = Array.from(el.classList)
+                        .filter(c => c !== 'editable' && c !== 'selected')
+                        .join(' ');
+                    el.className = originalClasses;
+                });
+
+                // 构建最终HTML - 按照您提供的格式
+                const htmlContent = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --md-sys-color-primary: #6750A4;
+            --md-sys-color-surface: #FEF7FF;
+            --md-sys-color-on-primary: #FFFFFF;
+            --md-sys-color-outline: #79747E;
+        }
+        * {
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #808080;
+            min-height: 100vh;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .code-area {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+        textarea {
+            width: 100%;
+            flex: 1;
+            border: 1px solid var(--md-sys-color-outline);
+            border-radius: 8px;
+            padding: 12px;
+            resize: none;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 14px;
+        }
+        .button-container {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            border: none;
+            background: var(--md-sys-color-primary);
+            color: var(--md-sys-color-on-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .fab:hover {
+            transform: scale(1.05);
+        }
+        .fab:active {
+            transform: scale(0.95);
+        }
+        h3 {
+            margin: 0 0 12px 0;
+            color: var(--md-sys-color-primary);
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    ${cloneCanvas.innerHTML}
+</body>
+</html>`;
+                
+                // 创建下载链接
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'exported-page.html';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+            
+            // 获取所有CSS规则
+            function getAllCSSRules() {
+                let css = '';
+                for (let i = 0; i < document.styleSheets.length; i++) {
+                    const sheet = document.styleSheets[i];
+                    try {
+                        if (sheet.cssRules) {
+                            for (let j = 0; j < sheet.cssRules.length; j++) {
+                                css += sheet.cssRules[j].cssText + '\n';
+                            }
+                        }
+                    } catch (e) {
+                        // 跨域样式表无法访问
+                        console.warn('无法访问样式表:', sheet.href);
+                    }
+                }
+                return css;
+            }
+            
+            // 初始绑定所有可编辑元素的事件
+            function bindEditableEvents() {
+                document.querySelectorAll('.editable').forEach(el => {
+                    el.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        selectElement(this);
+                    });
+                });
+            }
+            
+            // 初始化
+            bindEditableEvents();
+        });
+    </script>
+</body>
+</html>
