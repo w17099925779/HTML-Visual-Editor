@@ -25,14 +25,15 @@ https://w17099925779.github.io/html-visual-editor/
 
 源码本地使用方法:
 1. 克隆仓库
-git clone https://github.com/your-username/html-visual-editor.git
-2. 在浏览器中打开 `index.html`
+git clone git@github.com:w17099925779/html-visual-editor.git
 
-3. 从左侧面板拖拽组件到画布.
+3. 在浏览器中打开 `index.html`
 
-4. 在右侧面板编辑属性.
+4. 从左侧面板拖拽组件到画布.
 
-5. 一键导出最终HTML代码.
+5. 在右侧面板编辑属性.
+
+6. 一键导出最终HTML代码.
 
 
 开源协议
